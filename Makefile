@@ -12,11 +12,17 @@ DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 _OBJS = fractalogy.o
 OBJS = $(patsubst %,$(ODIR)/%,$(_OBJS))
 
-fractalogy: $(OBJS)
-	$(CC) $(CFLAGS) $^ -o $(EDIR)/$@
+$(EDIR)/fractalogy: $(OBJS) | $(EDIR)
+	$(CC) $(CFLAGS) $^ -o $@
 
-$(ODIR)/%.o: $(SDIR)/%.cpp $(DEPS)
+$(ODIR)/%.o: $(SDIR)/%.cpp $(DEPS) | $(ODIR)
 	$(CC) -x cu $(CFLAGS) -I$(IDIR) -dc $< -o $@
+
+$(ODIR):
+	mkdir $@
+
+$(EDIR):
+	mkdir $@
 
 clean:
 	rm -f $(ODIR)/*.o $(EDIR)/*
