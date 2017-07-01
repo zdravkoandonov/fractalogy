@@ -14,15 +14,25 @@ int rgb_value(int value, int max) {
 }
 
 __device__
+cuDoubleComplex cuCexp(cuDoubleComplex z) {
+  double e = exp(cuCreal(z));
+
+  double s, c;
+  sincos(cuCimag(z), &s, &c);
+
+  return make_cuDoubleComplex(c * e, s * e);
+}
+
+__device__
 int iteration(cuDoubleComplex c, int limit = 1000) {
   int i = 0;
   double n;
   cuDoubleComplex z = make_cuDoubleComplex(0, 0);
   while ((n = cuCreal(cuCmul(cuConj(z), z))) < 4 && i < limit) {
-    z = cuCadd(cuCmul(z, z), c);
-    // z = exp(z) - c;
+    // z = cuCadd(cuCmul(z, z), c);
+    // z = cuCsub(cuCexp(z), c);
     // z = c * exp(-z) + z * z;
-    // z = cuCadd(cuCmul(c, exp(cuCsub(make_cuDoubleComplex(0, 0), z))), cuCmul(z, z));
+    z = cuCadd(cuCmul(c, cuCexp(cuCsub(make_cuDoubleComplex(0, 0), z))), cuCmul(z, z));
     ++i;
   }
 
