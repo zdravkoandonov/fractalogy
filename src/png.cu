@@ -3,10 +3,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <complex>
+#include <iostream>
+#include <cmath>
+#include <thrust/complex.h>
 
-using std::complex;
-using std::exp;
-using std::norm;
+using thrust::complex;
+using thrust::exp;
+using thrust::norm;
 
 // A coloured pixel.
 struct Pixel {
@@ -23,6 +26,7 @@ struct Bitmap {
 };
 
 // Given "bitmap", this returns the pixel of bitmap at the point ("x", "y").
+__host__ __device__
 Pixel* pixel_at(Bitmap* bitmap, int x, int y) {
   return bitmap->pixels + bitmap->width * y + x;
 }
@@ -114,10 +118,12 @@ int save_png_to_file(Bitmap* bitmap, const char* path) {
 /* Given "value" and "max", the maximum value which we expect "value"
    to take, this returns an integer between 0 and 255 proportional to
    "value" divided by "max". */
+__device__
 int rgb_value(int value, int max) {
   return (int)(256 * (value / (double)max));
 }
 
+__device__
 int iteration(complex<double> c, int limit = 1000) {
   int i = 0;
   double n;
@@ -133,30 +139,73 @@ int iteration(complex<double> c, int limit = 1000) {
   return i;
 }
 
-int main() {
-  Bitmap fruit;
-  fruit.width = 5000;
-  fruit.height = 5000;
-  fruit.pixels = new Pixel[fruit.width * fruit.height];
+__global__
+void calc(Bitmap* bitmap) {
+  // int index = blockIdx.x * blockDim.x + threadIdx.x;
+  // int stride = gridDim.x * blockDim.x;
 
-  double lower = -2, upper = 2;
-  for (int y = 0; y < fruit.height; ++y) {
-    for (int x = 0; x < fruit.width; ++x) {
-      complex<double> t(lower + (upper - lower) * x / (fruit.width - 1),
-                        lower + (upper - lower) * y / (fruit.height - 1));
-      int iter = iteration(t);
-      Pixel* pixel = pixel_at(&fruit, x, y);
+  // for (int i = index; i < n; i += stride) {
+  //   result[i] = iteration(c[i]);
+  // }
+
+  double lowerX = 0, upperX = 4;
+  double lowerY = -2, upperY = 2;
+
+  int x, y;
+  int xStride = gridDim.x * blockDim.x;
+  int yStride = gridDim.y * blockDim.y;
+
+  complex<double> t;
+  int iter;
+  Pixel* pixel;
+  int width = bitmap->width;
+  int height = bitmap->height;
+  for (y = blockIdx.y * blockDim.y + threadIdx.y; y < height; y += yStride) {
+    for (x = blockIdx.x * blockDim.x + threadIdx.x; x < width; x += xStride) {
+      t = complex<double>(lowerX + (upperX - lowerX) * x / (width - 1),
+                        lowerY + (upperY - lowerY) * y / (height - 1));
+      iter = iteration(t);
+      pixel = pixel_at(bitmap, x, y);
       pixel->red = rgb_value(1000 - iter, 1000);
       pixel->green = rgb_value(500 - iter, 1000);
       pixel->blue = rgb_value(200 - iter, 1000);
+      // printf("(%d %d) %d (strides: %d %d) (w/h: %d %d) \n", x, y, iter, xStride, yStride, width, height);
     }
+    // printf("(%d %d) %d \n", x, y, iter);
   }
+}
 
-  /* Write the image to a file 'fruit.png'. */
-  save_png_to_file(&fruit, "fruit.png");
+int main() {
+  Bitmap bitmap;
+  bitmap.width = 200;
+  bitmap.height = 200;
+  cudaMalloc(&bitmap.pixels, sizeof(Pixel) * bitmap.width * bitmap.height);
 
-  delete[] fruit.pixels;
+  Bitmap* devBitmap;
+  cudaMalloc(&devBitmap, sizeof(Bitmap));
+  cudaMemcpy(devBitmap, &bitmap, sizeof(Bitmap), cudaMemcpyHostToDevice);
+
+  dim3 threadsPerBlock(16, 16);
+  dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                 (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+  calc<<<numBlocks, threadsPerBlock>>>(devBitmap);
+
+  cudaDeviceSynchronize();
+
+  Pixel* devicePixels = bitmap.pixels;
+  bitmap.pixels = new Pixel[bitmap.width * bitmap.height];
+  cudaMemcpy(bitmap.pixels, devicePixels, sizeof(Pixel) * bitmap.width * bitmap.height, cudaMemcpyDeviceToHost);
+
+  save_png_to_file(&bitmap, "fractal.png");
+
+  cudaFree(devicePixels);
+  cudaFree(devBitmap);
+
+  delete[] bitmap.pixels;
+
+  cudaError error = cudaGetLastError();
+  std::cout << cudaGetErrorString(error) << std::endl;
 
   return 0;
 }
-
