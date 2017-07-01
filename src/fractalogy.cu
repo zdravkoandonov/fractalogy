@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <cuComplex.h>
 #include <iostream>
-#include <unistd.h>
+#include <getopt.h>
 #include "offset.h"
 #include "bitmap.h"
 #include "png_writer.h"
@@ -100,9 +100,19 @@ void generateImage(int width, int height, Offset offset, const char* filename) {
 
 int main(int argc, char** argv) {
   char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
-
+  bool quiet = false;
   int c;
-  while ((c = getopt(argc, argv, "s:r:t:o:")) != -1)
+  static struct option long_options[] =
+      {
+        {"quiet",   no_argument,       0, 'q'},
+        {"size",    required_argument, 0, 's'},
+        {"rect",    required_argument, 0, 'r'},
+        {"tasks",   required_argument, 0, 't'},
+        {"output",  required_argument, 0, 'o'},
+        {0, 0, 0, 0}
+      };
+
+  while ((c = getopt_long_only(argc, argv, "s:r:t:o:q", long_options, NULL)) != -1)
     switch (c) {
       case 's':
         svalue = optarg;
@@ -115,6 +125,9 @@ int main(int argc, char** argv) {
         break;
       case 'o':
         filenameArg = optarg;
+        break;
+      case 'q':
+        quiet = true;
         break;
       case '?':
         if (optopt == 's')
@@ -144,6 +157,7 @@ int main(int argc, char** argv) {
   printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
   printf("tvalue = %s; %d\n", tvalue, threads);
   printf("filenameArg = %s; %s\n", filenameArg, filename);
+  printf("quiet = %d\n", quiet);
 
   //////////////////////////////////
 
