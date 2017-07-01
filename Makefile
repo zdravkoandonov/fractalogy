@@ -1,5 +1,5 @@
 CC = nvcc
-CFLAGS = -gencode arch=compute_20,code=sm_20
+CFLAGS = -gencode arch=compute_13,code=sm_13 -Iinclude
 
-fractology:
-	$(CC) $(CFLAGS) src/fractalogy.cu -lpng -o bin/png
+fractalogy:
+	$(CC) $(CFLAGS) src/*.cu src/*.cpp -lpng -o bin/fractalogy
