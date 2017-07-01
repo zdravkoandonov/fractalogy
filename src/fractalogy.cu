@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <cuComplex.h>
 #include <iostream>
+#include <unistd.h>
 #include "offset.h"
 #include "bitmap.h"
 #include "png_writer.h"
@@ -69,6 +70,34 @@ void calc(Offset offset, Bitmap bitmap) {
   }
 }
 
+void generateImage(int width, int height, Offset offset, const char* filename) {
+  Bitmap bitmap(width, height);
+
+  size_t pixelsCount = bitmap.width * bitmap.height;
+  size_t pixelsSize = pixelsCount * sizeof(Pixel);
+  cudaMalloc(&bitmap.pixels, pixelsSize);
+
+  dim3 threadsPerBlock(16, 16);
+  dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                 (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap);
+
+  cudaDeviceSynchronize();
+
+  Pixel* devicePixels = bitmap.pixels;
+  bitmap.pixels = new Pixel[pixelsCount];
+  cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
+
+  writePNG(bitmap, filename);
+
+  cudaFree(devicePixels);
+  delete[] bitmap.pixels;
+
+  cudaError error = cudaGetLastError();
+  std::cout << cudaGetErrorString(error) << std::endl;
+}
+
 int main(int argc, char** argv) {
   char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
 
@@ -119,31 +148,8 @@ int main(int argc, char** argv) {
   //////////////////////////////////
 
   Offset offset(lowerX, upperX, lowerY, upperY);
-  Bitmap bitmap(width, height);
 
-  size_t pixelsCount = bitmap.width * bitmap.height;
-  size_t pixelsSize = pixelsCount * sizeof(Pixel);
-  cudaMalloc(&bitmap.pixels, pixelsSize);
-
-  dim3 threadsPerBlock(16, 16);
-  dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                 (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap);
-
-  cudaDeviceSynchronize();
-
-  Pixel* devicePixels = bitmap.pixels;
-  bitmap.pixels = new Pixel[pixelsCount];
-  cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
-
-  writePNG(bitmap, filename);
-
-  cudaFree(devicePixels);
-  delete[] bitmap.pixels;
-
-  cudaError error = cudaGetLastError();
-  std::cout << cudaGetErrorString(error) << std::endl;
+  generateImage(width, height, offset, filename);
 
   return 0;
 }
