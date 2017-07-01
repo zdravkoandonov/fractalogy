@@ -6,7 +6,10 @@
 #include <iostream>
 #include <cmath>
 #include <thrust/complex.h>
+#include <unistd.h>
+#include <string>
 
+using std::string;
 using thrust::complex;
 using thrust::exp;
 using thrust::norm;
@@ -129,7 +132,9 @@ int iteration(complex<double> c, int limit = 1000) {
   double n;
   complex<double> z(0, 0);
   while ((n = norm(z)) < 4 && i < limit) {
-    z = exp(z) - c;
+    // z = z * z + c;
+    // z = exp(z) - c;
+    z = c * exp(-z) + z * z;
     ++i;
   }
 
@@ -148,7 +153,7 @@ void calc(Bitmap* bitmap) {
   //   result[i] = iteration(c[i]);
   // }
 
-  double lowerX = 0, upperX = 4;
+  double lowerX = -2, upperX = 2;
   double lowerY = -2, upperY = 2;
 
   int x, y;
@@ -175,10 +180,65 @@ void calc(Bitmap* bitmap) {
   }
 }
 
-int main() {
+int main(int argc, char** argv) {
+  ////////////////////////////////////
+
+  char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
+  int c;
+
+  opterr = 0;
+
+  while ((c = getopt (argc, argv, "s:r:t:o:")) != -1)
+    switch (c)
+      {
+      case 's':
+        svalue = optarg;
+        break;
+      case 'r':
+        rvalue = optarg;
+        break;
+      case 't':
+        tvalue = optarg;
+        break;
+      case 'o':
+        filenameArg = optarg;
+        break;
+      case '?':
+        if (optopt == 's')
+          fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+        else if (isprint (optopt))
+          fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+        else
+          fprintf (stderr,
+                   "Unknown option character `\\x%x'.\n",
+                   optopt);
+        return 1;
+      default:
+        abort ();
+      }
+
+
+  int width = 1000, height = 1000;
+  double lowerX = -2, upperX = 2;
+  double lowerY = -2, upperY = 2;
+  int threads = 1;
+  char filename[100] = "fractal.png";
+  if (svalue != NULL)
+    sscanf(svalue, "%dx%d", &width, &height);
+  if (rvalue != NULL)
+    sscanf(rvalue, "%lf:%lf:%lf:%lf", &lowerX, &upperX, &lowerY, &upperY);
+  if (tvalue != NULL)
+    sscanf(tvalue, "%d", &threads);
+  if (filenameArg != NULL)
+    sscanf(filenameArg, "%s", filename);
+  printf ("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
+  printf ("tvalue = %s; %d\n", tvalue, threads);
+  printf ("filenameArg = %s; %s\n", filenameArg, filename);
+
+  //////////////////////////////////
   Bitmap bitmap;
-  bitmap.width = 200;
-  bitmap.height = 200;
+  bitmap.width = width;
+  bitmap.height = height;
   cudaMalloc(&bitmap.pixels, sizeof(Pixel) * bitmap.width * bitmap.height);
 
   Bitmap* devBitmap;
@@ -197,7 +257,7 @@ int main() {
   bitmap.pixels = new Pixel[bitmap.width * bitmap.height];
   cudaMemcpy(bitmap.pixels, devicePixels, sizeof(Pixel) * bitmap.width * bitmap.height, cudaMemcpyDeviceToHost);
 
-  save_png_to_file(&bitmap, "fractal.png");
+  save_png_to_file(&bitmap, filename);
 
   cudaFree(devicePixels);
   cudaFree(devBitmap);
