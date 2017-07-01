@@ -1,18 +1,11 @@
 #include <png.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <complex>
+#include <cuComplex.h>
 #include <iostream>
 #include <cmath>
-#include <thrust/complex.h>
-#include <unistd.h>
-#include <string>
-
-using std::string;
-using thrust::complex;
-using thrust::exp;
-using thrust::norm;
 
 // A coloured pixel.
 struct Pixel {
@@ -127,14 +120,15 @@ int rgb_value(int value, int max) {
 }
 
 __device__
-int iteration(complex<double> c, int limit = 1000) {
+int iteration(cuDoubleComplex c, int limit = 1000) {
   int i = 0;
   double n;
-  complex<double> z(0, 0);
-  while ((n = norm(z)) < 4 && i < limit) {
-    // z = z * z + c;
+  cuDoubleComplex z = make_cuDoubleComplex(0, 0);
+  while ((n = cuCreal(cuCmul(cuConj(z), z))) < 4 && i < limit) {
+    z = cuCadd(cuCmul(z, z), c);
     // z = exp(z) - c;
-    z = c * exp(-z) + z * z;
+    // z = c * exp(-z) + z * z;
+    // z = cuCadd(cuCmul(c, exp(cuCsub(make_cuDoubleComplex(0, 0), z))), cuCmul(z, z));
     ++i;
   }
 
@@ -160,15 +154,15 @@ void calc(Bitmap bitmap) {
   int xStride = gridDim.x * blockDim.x;
   int yStride = gridDim.y * blockDim.y;
 
-  complex<double> t;
+  cuDoubleComplex t;
   int iter;
   Pixel* pixel;
   int width = bitmap.width;
   int height = bitmap.height;
   for (y = blockIdx.y * blockDim.y + threadIdx.y; y < height; y += yStride) {
     for (x = blockIdx.x * blockDim.x + threadIdx.x; x < width; x += xStride) {
-      t = complex<double>(lowerX + (upperX - lowerX) * x / (width - 1),
-                        lowerY + (upperY - lowerY) * y / (height - 1));
+      t = make_cuDoubleComplex(lowerX + (upperX - lowerX) * x / (width - 1),
+                               lowerY + (upperY - lowerY) * y / (height - 1));
       iter = iteration(t);
       pixel = pixel_at(bitmap, x, y);
       pixel->red = rgb_value(1000 - iter, 1000);
