@@ -2,6 +2,7 @@
 #include <cuComplex.h>
 #include <iostream>
 #include <getopt.h>
+#include <cmath>
 #include "offset.h"
 #include "bitmap.h"
 #include "png_writer.h"
@@ -70,16 +71,27 @@ void calc(Offset offset, Bitmap bitmap) {
   }
 }
 
-void generateImage(int width, int height, Offset offset, const char* filename) {
+void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX, int &numBlocksY) {
+  double sqroot = sqrt(maxThreads);
+  threadsPerBlock1dim = exp2(fmin(floor(log2(sqroot)), 4));
+  numBlocksY = floor(sqroot / threadsPerBlock1dim);
+  numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
+  printf("%d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
+    threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
+}
+
+void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
   Bitmap bitmap(width, height);
 
   size_t pixelsCount = bitmap.width * bitmap.height;
   size_t pixelsSize = pixelsCount * sizeof(Pixel);
   cudaMalloc(&bitmap.pixels, pixelsSize);
 
-  dim3 threadsPerBlock(16, 16);
-  dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                 (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
+  int threadsPerBlock1dim, numBlocksX, numBlocksY;
+  threadConfigCalc(maxThreads, threadsPerBlock1dim, numBlocksX, numBlocksY);
+
+  dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
+  dim3 numBlocks(numBlocksX, numBlocksY);
 
   calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap);
 
@@ -99,8 +111,14 @@ void generateImage(int width, int height, Offset offset, const char* filename) {
 }
 
 int main(int argc, char** argv) {
-  char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
+  int width = 640, height = 480;
+  double lowerX = -2, upperX = 2;
+  double lowerY = -2, upperY = 2;
+  int maxThreads = 1;
+  char filename[100] = "fractal.png";
   bool quiet = false;
+
+  char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
   int c;
   static struct option long_options[] =
       {
@@ -141,21 +159,16 @@ int main(int argc, char** argv) {
         abort();
     }
 
-  int width = 640, height = 480;
-  double lowerX = -2, upperX = 2;
-  double lowerY = -2, upperY = 2;
-  int threads = 1;
-  char filename[100] = "fractal.png";
   if (svalue != NULL)
     sscanf(svalue, "%dx%d", &width, &height);
   if (rvalue != NULL)
     sscanf(rvalue, "%lf:%lf:%lf:%lf", &lowerX, &upperX, &lowerY, &upperY);
   if (tvalue != NULL)
-    sscanf(tvalue, "%d", &threads);
+    sscanf(tvalue, "%d", &maxThreads);
   if (filenameArg != NULL)
     sscanf(filenameArg, "%s", filename);
   printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
-  printf("tvalue = %s; %d\n", tvalue, threads);
+  printf("tvalue = %s; %d\n", tvalue, maxThreads);
   printf("filenameArg = %s; %s\n", filenameArg, filename);
   printf("quiet = %d\n", quiet);
 
@@ -163,7 +176,7 @@ int main(int argc, char** argv) {
 
   Offset offset(lowerX, upperX, lowerY, upperY);
 
-  generateImage(width, height, offset, filename);
+  generateImage(width, height, offset, maxThreads, filename, quiet);
 
   return 0;
 }
