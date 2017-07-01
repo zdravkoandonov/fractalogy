@@ -30,8 +30,8 @@ struct Bitmap {
 
 // Given "bitmap", this returns the pixel of bitmap at the point ("x", "y").
 __host__ __device__
-Pixel* pixel_at(Bitmap* bitmap, int x, int y) {
-  return bitmap->pixels + bitmap->width * y + x;
+Pixel* pixel_at(const Bitmap& bitmap, int x, int y) {
+  return bitmap.pixels + bitmap.width * y + x;
 }
 
 /* Write "bitmap" to a PNG file specified by "path"; returns 0 on
@@ -94,7 +94,7 @@ int save_png_to_file(Bitmap* bitmap, const char* path) {
       (png_byte *)png_malloc(png_ptr, bitmap->width * pixel_size * sizeof(uint8_t));
     row_pointers[y] = row;
     for (x = 0; x < bitmap->width; ++x) {
-      Pixel* pixel = pixel_at(bitmap, x, y);
+      Pixel* pixel = pixel_at(*bitmap, x, y);
       *row++ = pixel->red;
       *row++ = pixel->green;
       *row++ = pixel->blue;
@@ -145,7 +145,7 @@ int iteration(complex<double> c, int limit = 1000) {
 }
 
 __global__
-void calc(Bitmap* bitmap) {
+void calc(Bitmap bitmap) {
   // int index = blockIdx.x * blockDim.x + threadIdx.x;
   // int stride = gridDim.x * blockDim.x;
 
@@ -163,8 +163,8 @@ void calc(Bitmap* bitmap) {
   complex<double> t;
   int iter;
   Pixel* pixel;
-  int width = bitmap->width;
-  int height = bitmap->height;
+  int width = bitmap.width;
+  int height = bitmap.height;
   for (y = blockIdx.y * blockDim.y + threadIdx.y; y < height; y += yStride) {
     for (x = blockIdx.x * blockDim.x + threadIdx.x; x < width; x += xStride) {
       t = complex<double>(lowerX + (upperX - lowerX) * x / (width - 1),
@@ -239,29 +239,26 @@ int main(int argc, char** argv) {
   Bitmap bitmap;
   bitmap.width = width;
   bitmap.height = height;
-  cudaMalloc(&bitmap.pixels, sizeof(Pixel) * bitmap.width * bitmap.height);
 
-  Bitmap* devBitmap;
-  cudaMalloc(&devBitmap, sizeof(Bitmap));
-  cudaMemcpy(devBitmap, &bitmap, sizeof(Bitmap), cudaMemcpyHostToDevice);
+  size_t pixelsCount = bitmap.width * bitmap.height;
+  size_t pixelsSize = pixelsCount * sizeof(Pixel);
+  cudaMalloc(&bitmap.pixels, pixelsSize);
 
   dim3 threadsPerBlock(16, 16);
   dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
                  (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-  calc<<<numBlocks, threadsPerBlock>>>(devBitmap);
+  calc<<<numBlocks, threadsPerBlock>>>(bitmap);
 
   cudaDeviceSynchronize();
 
   Pixel* devicePixels = bitmap.pixels;
-  bitmap.pixels = new Pixel[bitmap.width * bitmap.height];
-  cudaMemcpy(bitmap.pixels, devicePixels, sizeof(Pixel) * bitmap.width * bitmap.height, cudaMemcpyDeviceToHost);
+  bitmap.pixels = new Pixel[pixelsCount];
+  cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
 
   save_png_to_file(&bitmap, filename);
 
   cudaFree(devicePixels);
-  cudaFree(devBitmap);
-
   delete[] bitmap.pixels;
 
   cudaError error = cudaGetLastError();
