@@ -1,6 +1,7 @@
 #ifndef FRACTALOGY_H
 #define FRACTALOGY_H
 
+#include <QDir>
 #include <QMainWindow>
 
 #include "imagegrid.h"
