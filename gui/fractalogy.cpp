@@ -99,7 +99,7 @@ QStringList Fractalogy::getArguments()
 {
     QStringList arguments;
     arguments << QString("-s %1x%2").arg(QString::number(width), QString::number(height))
-              << QString("-r %1:%2:%3:%4").arg(QString::number(lowerX), QString::number(upperX), QString::number(lowerY), QString::number(upperY))
+              << QString("-r %1:%2:%3:%4").arg(QString::number(lowerX, 'g', 14), QString::number(upperX, 'g', 14), QString::number(lowerY, 'g', 14), QString::number(upperY, 'g', 14))
               << QString("-t %1").arg(QString::number(threads))
               << QString("-o %1").arg(programDir.filePath(imagePath));
     return arguments;
