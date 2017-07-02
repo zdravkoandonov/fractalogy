@@ -1,6 +1,9 @@
 #include <stdio.h>
-#include <cuComplex.h>
 #include <iostream>
+#include <cuComplex.h>
+#include <getopt.h>
+#include <cmath>
+#include <sys/time.h>
 #include "offset.h"
 #include "bitmap.h"
 #include "png_writer.h"
@@ -43,7 +46,10 @@ int iteration(cuDoubleComplex c, int limit = 1000) {
 }
 
 __global__
-void calc(Offset offset, Bitmap bitmap) {
+void calc(Offset offset, Bitmap bitmap, bool quiet) {
+  if (!quiet)
+    printf("Thread-%d:%d on block %d:%d started.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
+
   double lowerX = offset.lowerX, upperX = offset.upperX;
   double lowerY = offset.lowerY, upperY = offset.upperY;
 
@@ -67,13 +73,87 @@ void calc(Offset offset, Bitmap bitmap) {
       pixel->blue = rgb_value(200 - iter, 1000);
     }
   }
+
+  if (!quiet)
+    printf("Thread-%d:%d on block %d:%d finished.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
+}
+
+void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX, int &numBlocksY, bool quiet = false) {
+  double sqroot = sqrt(maxThreads);
+  threadsPerBlock1dim = exp2(fmin(floor(log2(sqroot)), 4));
+  numBlocksY = floor(sqroot / threadsPerBlock1dim);
+  numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
+
+  // if (!quiet)
+    printf("Threads used in current run: %d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
+      threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
+}
+
+double cpuSecond() {
+ struct timeval tp;
+ gettimeofday(&tp,NULL);
+ return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
+}
+
+void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
+  Bitmap bitmap(width, height);
+
+  size_t pixelsCount = bitmap.width * bitmap.height;
+  size_t pixelsSize = pixelsCount * sizeof(Pixel);
+  cudaMalloc(&bitmap.pixels, pixelsSize);
+
+  int threadsPerBlock1dim, numBlocksX, numBlocksY;
+  threadConfigCalc(maxThreads, threadsPerBlock1dim, numBlocksX, numBlocksY, quiet);
+
+  dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
+  dim3 numBlocks(numBlocksX, numBlocksY);
+
+  double iStart = cpuSecond();
+
+  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
+  cudaDeviceSynchronize();
+
+  Pixel* devicePixels = bitmap.pixels;
+  bitmap.pixels = new Pixel[pixelsCount];
+  cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
+
+  double iElaps = cpuSecond() - iStart;
+  // if (!quiet)
+    printf("Execution time on gpu: %lf\n", iElaps);
+
+  writePNG(bitmap, filename);
+
+  cudaFree(devicePixels);
+  delete[] bitmap.pixels;
+
+  cudaError error = cudaGetLastError();
+  if (!quiet)
+    printf("%s\n", cudaGetErrorString(error));
 }
 
 int main(int argc, char** argv) {
-  char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
+  double iStart = cpuSecond();
 
+  int width = 640, height = 480;
+  double lowerX = -2, upperX = 2;
+  double lowerY = -2, upperY = 2;
+  int maxThreads = 1;
+  char filename[100] = "fractal.png";
+  bool quiet = false;
+
+  char *svalue = NULL, *rvalue = NULL, *tvalue = NULL, *filenameArg = NULL;
   int c;
-  while ((c = getopt(argc, argv, "s:r:t:o:")) != -1)
+  static struct option long_options[] =
+      {
+        {"quiet",   no_argument,       0, 'q'},
+        {"size",    required_argument, 0, 's'},
+        {"rect",    required_argument, 0, 'r'},
+        {"tasks",   required_argument, 0, 't'},
+        {"output",  required_argument, 0, 'o'},
+        {0, 0, 0, 0}
+      };
+
+  while ((c = getopt_long_only(argc, argv, "s:r:t:o:q", long_options, NULL)) != -1)
     switch (c) {
       case 's':
         svalue = optarg;
@@ -87,6 +167,9 @@ int main(int argc, char** argv) {
       case 'o':
         filenameArg = optarg;
         break;
+      case 'q':
+        quiet = true;
+        break;
       case '?':
         if (optopt == 's')
           fprintf(stderr, "Option -%c requires an argument.\n", optopt);
@@ -99,51 +182,29 @@ int main(int argc, char** argv) {
         abort();
     }
 
-  int width = 640, height = 480;
-  double lowerX = -2, upperX = 2;
-  double lowerY = -2, upperY = 2;
-  int threads = 1;
-  char filename[100] = "fractal.png";
   if (svalue != NULL)
     sscanf(svalue, "%dx%d", &width, &height);
   if (rvalue != NULL)
     sscanf(rvalue, "%lf:%lf:%lf:%lf", &lowerX, &upperX, &lowerY, &upperY);
   if (tvalue != NULL)
-    sscanf(tvalue, "%d", &threads);
+    sscanf(tvalue, "%d", &maxThreads);
   if (filenameArg != NULL)
     sscanf(filenameArg, "%s", filename);
-  printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
-  printf("tvalue = %s; %d\n", tvalue, threads);
-  printf("filenameArg = %s; %s\n", filenameArg, filename);
 
+  if (!quiet) {
+    printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
+    printf("tvalue = %s; %d\n", tvalue, maxThreads);
+    printf("filenameArg = %s; %s\n", filenameArg, filename);
+    printf("quiet = %d\n", quiet);
+  }
   //////////////////////////////////
 
   Offset offset(lowerX, upperX, lowerY, upperY);
-  Bitmap bitmap(width, height);
+  generateImage(width, height, offset, maxThreads, filename, quiet);
 
-  size_t pixelsCount = bitmap.width * bitmap.height;
-  size_t pixelsSize = pixelsCount * sizeof(Pixel);
-  cudaMalloc(&bitmap.pixels, pixelsSize);
-
-  dim3 threadsPerBlock(16, 16);
-  dim3 numBlocks((bitmap.width + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                 (bitmap.height + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap);
-
-  cudaDeviceSynchronize();
-
-  Pixel* devicePixels = bitmap.pixels;
-  bitmap.pixels = new Pixel[pixelsCount];
-  cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
-
-  writePNG(bitmap, filename);
-
-  cudaFree(devicePixels);
-  delete[] bitmap.pixels;
-
-  cudaError error = cudaGetLastError();
-  std::cout << cudaGetErrorString(error) << std::endl;
+  double iElaps = cpuSecond() - iStart;
+  // if (!quiet)
+    printf("Total execution time for this run: %lf\n", iElaps);
 
   return 0;
 }
