@@ -35,6 +35,7 @@ private:
 
     QStringList getArguments();
     void generateFractalImage();
+    void setReadRanges();
 };
 
 #endif // FRACTALOGY_H

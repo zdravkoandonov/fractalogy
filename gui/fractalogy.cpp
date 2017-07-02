@@ -105,8 +105,18 @@ QStringList Fractalogy::getArguments()
     return arguments;
 }
 
+void Fractalogy::setReadRanges()
+{
+    ui->lowerXR->setText(QString::number(lowerX, 'g', 14));
+    ui->upperXR->setText(QString::number(upperX, 'g', 14));
+    ui->lowerYR->setText(QString::number(lowerY, 'g', 14));
+    ui->upperYR->setText(QString::number(upperY, 'g', 14));
+}
+
 void Fractalogy::generateFractalImage()
 {
+    setReadRanges();
+
     QProcess process(this);
     process.start(program, getArguments());
     if (!process.waitForFinished()) {
