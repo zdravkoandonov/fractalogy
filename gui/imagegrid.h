@@ -24,7 +24,7 @@ signals:
 
 private:
     Ui::ImageGrid *ui;
-    QImage image;
+    QImage *image;
 
     void setImage(const QImage &newImage);
     void wheelEvent(QWheelEvent *event);

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>630</width>
-    <height>500</height>
+    <width>840</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -121,8 +121,8 @@
    <widget class="QPushButton" name="generateButton">
     <property name="geometry">
      <rect>
-      <x>210</x>
-      <y>40</y>
+      <x>560</x>
+      <y>10</y>
       <width>181</width>
       <height>51</height>
      </rect>
@@ -153,12 +153,16 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>90</y>
-      <width>611</width>
-      <height>351</height>
+      <y>60</y>
+      <width>821</width>
+      <height>481</height>
      </rect>
     </property>
-    <layout class="QVBoxLayout" name="imageGridContainer"/>
+    <layout class="QVBoxLayout" name="imageGridContainer">
+     <property name="sizeConstraint">
+      <enum>QLayout::SetDefaultConstraint</enum>
+     </property>
+    </layout>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menuBar">
@@ -166,7 +170,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>630</width>
+     <width>840</width>
      <height>22</height>
     </rect>
    </property>

@@ -9,6 +9,7 @@ ImageGrid::ImageGrid(QWidget *parent) :
     ui(new Ui::ImageGrid)
 {
     ui->setupUi(this);
+    image = nullptr;
 }
 
 bool ImageGrid::loadFile(const QString &fileName)
@@ -29,13 +30,17 @@ bool ImageGrid::loadFile(const QString &fileName)
 
 void ImageGrid::setImage(const QImage &newImage)
 {
-    image = newImage;
-    ui->imageLabel->setFixedSize(image.size());
-    ui->imageLabel->setPixmap(QPixmap::fromImage(image));
+    image = new QImage(newImage);
+    ui->imageLabel->setFixedSize(image->size());
+    ui->imageLabel->setPixmap(QPixmap::fromImage(*image));
 }
 
 void ImageGrid::wheelEvent(QWheelEvent *event)
 {
+    if (!image) {
+        return;
+    }
+
     if (event->delta() > 0) {
         emit scrolledUp(event);
     } else if (event->delta() < 0) {
@@ -46,4 +51,5 @@ void ImageGrid::wheelEvent(QWheelEvent *event)
 ImageGrid::~ImageGrid()
 {
     delete ui;
+    delete image;
 }
