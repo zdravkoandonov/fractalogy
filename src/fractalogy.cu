@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <cuComplex.h>
 #include <iostream>
+#include <cuComplex.h>
 #include <getopt.h>
 #include <cmath>
 #include "offset.h"
@@ -45,7 +45,14 @@ int iteration(cuDoubleComplex c, int limit = 1000) {
 }
 
 __global__
-void calc(Offset offset, Bitmap bitmap) {
+void calc(Offset offset, Bitmap bitmap, bool quiet) {
+  if (!quiet)
+    printf("Thread-%d:%d on block %d:%d started.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
+
+  // „Thread-<num> execution time was (millis): <num>“,
+  // „Threads used in current run: <num>“,
+  // „Total execution time for current run (millis): <num>
+
   double lowerX = offset.lowerX, upperX = offset.upperX;
   double lowerY = offset.lowerY, upperY = offset.upperY;
 
@@ -69,15 +76,20 @@ void calc(Offset offset, Bitmap bitmap) {
       pixel->blue = rgb_value(200 - iter, 1000);
     }
   }
+
+  if (!quiet)
+    printf("Thread-%d:%d on block %d:%d finished.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
 }
 
-void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX, int &numBlocksY) {
+void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX, int &numBlocksY, bool quiet = false) {
   double sqroot = sqrt(maxThreads);
   threadsPerBlock1dim = exp2(fmin(floor(log2(sqroot)), 4));
   numBlocksY = floor(sqroot / threadsPerBlock1dim);
   numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
-  printf("%d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
-    threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
+
+  if (!quiet)
+    printf("%d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
+      threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
 }
 
 void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
@@ -88,12 +100,12 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   cudaMalloc(&bitmap.pixels, pixelsSize);
 
   int threadsPerBlock1dim, numBlocksX, numBlocksY;
-  threadConfigCalc(maxThreads, threadsPerBlock1dim, numBlocksX, numBlocksY);
+  threadConfigCalc(maxThreads, threadsPerBlock1dim, numBlocksX, numBlocksY, quiet);
 
   dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
   dim3 numBlocks(numBlocksX, numBlocksY);
 
-  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap);
+  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
 
   cudaDeviceSynchronize();
 
@@ -107,7 +119,8 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   delete[] bitmap.pixels;
 
   cudaError error = cudaGetLastError();
-  std::cout << cudaGetErrorString(error) << std::endl;
+  if (!quiet)
+    printf("%s\n", cudaGetErrorString(error));
 }
 
 int main(int argc, char** argv) {
@@ -167,15 +180,16 @@ int main(int argc, char** argv) {
     sscanf(tvalue, "%d", &maxThreads);
   if (filenameArg != NULL)
     sscanf(filenameArg, "%s", filename);
-  printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
-  printf("tvalue = %s; %d\n", tvalue, maxThreads);
-  printf("filenameArg = %s; %s\n", filenameArg, filename);
-  printf("quiet = %d\n", quiet);
 
+  if (!quiet) {
+    printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
+    printf("tvalue = %s; %d\n", tvalue, maxThreads);
+    printf("filenameArg = %s; %s\n", filenameArg, filename);
+    printf("quiet = %d\n", quiet);
+  }
   //////////////////////////////////
 
   Offset offset(lowerX, upperX, lowerY, upperY);
-
   generateImage(width, height, offset, maxThreads, filename, quiet);
 
   return 0;
