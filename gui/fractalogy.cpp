@@ -19,7 +19,7 @@ Fractalogy::Fractalogy(QWidget *parent) :
     ui->imageGridContainer->addWidget(imageGrid);
 
     programDir = QDir::home();
-    programDir.cd("Documents/cuda/fractalogy");
+    programDir.cd("source/repos/fractalogy");
     program = programDir.filePath("bin/fractalogy");
 }
 
@@ -49,7 +49,7 @@ void Fractalogy::on_generateButton_clicked()
 void Fractalogy::zoomIn(QWheelEvent *event)
 {
     event->ignore();
-    double zoomCoeff = 1.3;
+    double zoomCoeff = 1.4;
 
     double x = upperX - lowerX;
     double y = upperY - lowerY;
@@ -63,8 +63,8 @@ void Fractalogy::zoomIn(QWheelEvent *event)
 
     lowerX = xPos - xPosToLower / zoomCoeff;
     upperX = xPos + xPosToUpper / zoomCoeff;
-    lowerX = yPos - yPosToLower / zoomCoeff;
-    upperX = yPos + yPosToUpper / zoomCoeff;
+    lowerY = yPos - yPosToLower / zoomCoeff;
+    upperY = yPos + yPosToUpper / zoomCoeff;
 
     generateFractalImage();
     event->accept();
@@ -74,7 +74,7 @@ void Fractalogy::zoomOut(QWheelEvent *event)
 {
     event->ignore();
 
-    double zoomCoeff = 1.3;
+    double zoomCoeff = 1.4;
 
     double x = upperX - lowerX;
     double y = upperY - lowerY;
@@ -88,8 +88,8 @@ void Fractalogy::zoomOut(QWheelEvent *event)
 
     lowerX = xPos - xPosToLower * zoomCoeff;
     upperX = xPos + xPosToUpper * zoomCoeff;
-    lowerX = yPos - yPosToLower * zoomCoeff;
-    upperX = yPos + yPosToUpper * zoomCoeff;
+    lowerY = yPos - yPosToLower * zoomCoeff;
+    upperY = yPos + yPosToUpper * zoomCoeff;
 
     generateFractalImage();
     event->accept();

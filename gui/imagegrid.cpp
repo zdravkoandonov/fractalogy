@@ -14,7 +14,7 @@ ImageGrid::ImageGrid(QWidget *parent) :
 bool ImageGrid::loadFile(const QString &fileName)
 {
     QImageReader reader(fileName);
-    reader.setAutoTransform(true);
+//    reader.setAutoTransform(true);
     const QImage newImage = reader.read();
     if (newImage.isNull()) {
         QMessageBox::information(this, QGuiApplication::applicationDisplayName(),
