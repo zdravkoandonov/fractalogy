@@ -3,6 +3,7 @@
 #include <cuComplex.h>
 #include <getopt.h>
 #include <cmath>
+#include <sys/time.h>
 #include "offset.h"
 #include "bitmap.h"
 #include "png_writer.h"
@@ -49,10 +50,6 @@ void calc(Offset offset, Bitmap bitmap, bool quiet) {
   if (!quiet)
     printf("Thread-%d:%d on block %d:%d started.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
 
-  // „Thread-<num> execution time was (millis): <num>“,
-  // „Threads used in current run: <num>“,
-  // „Total execution time for current run (millis): <num>
-
   double lowerX = offset.lowerX, upperX = offset.upperX;
   double lowerY = offset.lowerY, upperY = offset.upperY;
 
@@ -87,9 +84,15 @@ void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX,
   numBlocksY = floor(sqroot / threadsPerBlock1dim);
   numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
 
-  if (!quiet)
-    printf("%d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
+  // if (!quiet)
+    printf("Threads used in current run: %d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
       threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
+}
+
+double cpuSecond() {
+ struct timeval tp;
+ gettimeofday(&tp,NULL);
+ return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
 }
 
 void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
@@ -105,13 +108,18 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
   dim3 numBlocks(numBlocksX, numBlocksY);
 
-  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
+  double iStart = cpuSecond();
 
+  calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
   cudaDeviceSynchronize();
 
   Pixel* devicePixels = bitmap.pixels;
   bitmap.pixels = new Pixel[pixelsCount];
   cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
+
+  double iElaps = cpuSecond() - iStart;
+  // if (!quiet)
+    printf("Execution time on gpu: %lf\n", iElaps);
 
   writePNG(bitmap, filename);
 
@@ -124,6 +132,8 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
 }
 
 int main(int argc, char** argv) {
+  double iStart = cpuSecond();
+
   int width = 640, height = 480;
   double lowerX = -2, upperX = 2;
   double lowerY = -2, upperY = 2;
@@ -191,6 +201,10 @@ int main(int argc, char** argv) {
 
   Offset offset(lowerX, upperX, lowerY, upperY);
   generateImage(width, height, offset, maxThreads, filename, quiet);
+
+  double iElaps = cpuSecond() - iStart;
+  // if (!quiet)
+    printf("Total execution time for this run: %lf\n", iElaps);
 
   return 0;
 }
