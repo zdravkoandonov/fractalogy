@@ -78,15 +78,20 @@ void calc(Offset offset, Bitmap bitmap, bool quiet) {
     printf("Thread-%d:%d on block %d:%d finished.\n", threadIdx.x, threadIdx.y, blockIdx.x, blockIdx.y);
 }
 
-void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX, int &numBlocksY, bool quiet = false) {
-  double sqroot = sqrt(maxThreads);
-  threadsPerBlock1dim = exp2(fmin(floor(log2(sqroot)), 4));
-  numBlocksY = floor(sqroot / threadsPerBlock1dim);
-  numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
+void threadConfigCalc(int threadsX, int threadsY, int width, int height, int &threadsPerBlock1dim1, int &threadsPerBlock1dim2, int &numBlocksX, int &numBlocksY, bool quiet = false) {
+  // double sqroot = sqrt(maxThreads);
+  // threadsPerBlock1dim = exp2(fmin(floor(log2(sqroot)), 4));
+  // numBlocksY = floor(sqroot / threadsPerBlock1dim);
+  // numBlocksX = floor((double)maxThreads / (threadsPerBlock1dim * threadsPerBlock1dim * numBlocksY));
+
+  threadsPerBlock1dim1 = threadsX;
+  threadsPerBlock1dim2 = threadsY;
+  numBlocksX = (width + threadsPerBlock1dim1 - 1) / threadsPerBlock1dim1;
+  numBlocksY = (height + threadsPerBlock1dim2 - 1) / threadsPerBlock1dim2;
 
   // if (!quiet)
-    printf("Threads used in current run: %d <= %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
-      threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
+    printf("Threads used in current run: %d, threadsPerBlock: %dx%d, numBlocksXxnumBlocksY: %dx%d\n",
+      threadsPerBlock1dim1 * threadsPerBlock1dim2 * numBlocksX * numBlocksY, threadsPerBlock1dim1, threadsPerBlock1dim2, numBlocksX, numBlocksY);
 }
 
 double cpuSecondMonolitic() {
@@ -95,17 +100,17 @@ double cpuSecondMonolitic() {
   return ((double)tp.tv_sec + (double)tp.tv_nsec*1.e-9);
 }
 
-void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
+void generateImage(int width, int height, Offset offset, int threadsX, int threadsY, const char* filename, bool quiet) {
   Bitmap bitmap(width, height);
 
   size_t pixelsCount = bitmap.width * bitmap.height;
   size_t pixelsSize = pixelsCount * sizeof(Pixel);
   cudaMalloc(&bitmap.pixels, pixelsSize);
 
-  int threadsPerBlock1dim, numBlocksX, numBlocksY;
-  threadConfigCalc(maxThreads, threadsPerBlock1dim, numBlocksX, numBlocksY, quiet);
+  int threadsPerBlock1dim1, threadsPerBlock1dim2, numBlocksX, numBlocksY;
+  threadConfigCalc(threadsX, threadsY, bitmap.width, bitmap.height, threadsPerBlock1dim1, threadsPerBlock1dim2, numBlocksX, numBlocksY, quiet);
 
-  dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
+  dim3 threadsPerBlock(threadsPerBlock1dim1, threadsPerBlock1dim2);
   dim3 numBlocks(numBlocksX, numBlocksY);
 
   // TIMINGS
@@ -146,7 +151,7 @@ int main(int argc, char** argv) {
   int width = 640, height = 480;
   double lowerX = -2, upperX = 2;
   double lowerY = -2, upperY = 2;
-  int maxThreads = 1;
+  int threadsX = 1, threadsY = 1;
   char filename[100] = "fractal.png";
   bool quiet = false;
 
@@ -196,20 +201,20 @@ int main(int argc, char** argv) {
   if (rvalue != NULL)
     sscanf(rvalue, "%lf:%lf:%lf:%lf", &lowerX, &upperX, &lowerY, &upperY);
   if (tvalue != NULL)
-    sscanf(tvalue, "%d", &maxThreads);
+    sscanf(tvalue, "%dx%d", &threadsX, &threadsY);
   if (filenameArg != NULL)
     sscanf(filenameArg, "%s", filename);
 
   if (!quiet) {
     printf("svalue = %s;%dx%d\nrvalue = %s; %lf, %lf, %lf, %lf\n", svalue, width, height, rvalue, lowerX, upperX, lowerY, upperY);
-    printf("tvalue = %s; %d\n", tvalue, maxThreads);
+    printf("tvalue = %s; %dx%d\n", tvalue, threadsX, threadsY);
     printf("filenameArg = %s; %s\n", filenameArg, filename);
     printf("quiet = %d\n", quiet);
   }
   //////////////////////////////////
 
   Offset offset(lowerX, upperX, lowerY, upperY);
-  generateImage(width, height, offset, maxThreads, filename, quiet);
+  generateImage(width, height, offset, threadsX, threadsY, filename, quiet);
 
   double iElaps = cpuSecondMonolitic() - iStart;
   // if (!quiet)
