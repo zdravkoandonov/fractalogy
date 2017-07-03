@@ -89,10 +89,10 @@ void threadConfigCalc(int maxThreads, int &threadsPerBlock1dim, int &numBlocksX,
       threadsPerBlock1dim * threadsPerBlock1dim * numBlocksX * numBlocksY, maxThreads, threadsPerBlock1dim, threadsPerBlock1dim, numBlocksX, numBlocksY);
 }
 
-double cpuSecond() {
- struct timeval tp;
- gettimeofday(&tp,NULL);
- return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
+double cpuSecondMonolitic() {
+  struct timespec tp;
+  clock_gettime(CLOCK_MONOTONIC, &tp);
+  return ((double)tp.tv_sec + (double)tp.tv_nsec*1.e-9);
 }
 
 void generateImage(int width, int height, Offset offset, int maxThreads, const char* filename, bool quiet) {
@@ -108,7 +108,8 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   dim3 threadsPerBlock(threadsPerBlock1dim, threadsPerBlock1dim);
   dim3 numBlocks(numBlocksX, numBlocksY);
 
-  double iStart = cpuSecond();
+  // TIMINGS
+  double iStartMonolitic = cpuSecondMonolitic();
 
   calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
   cudaDeviceSynchronize();
@@ -117,9 +118,9 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   bitmap.pixels = new Pixel[pixelsCount];
   cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
 
-  double iElaps = cpuSecond() - iStart;
+  double iElapsMonolitic = cpuSecondMonolitic() - iStartMonolitic;
   // if (!quiet)
-    printf("Execution time on gpu: %lf\n", iElaps);
+    printf("Execution time on gpu: %lf\n", iElapsMonolitic);
 
   writePNG(bitmap, filename);
 
@@ -132,7 +133,7 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
 }
 
 int main(int argc, char** argv) {
-  double iStart = cpuSecond();
+  double iStart = cpuSecondMonolitic();
 
   int width = 640, height = 480;
   double lowerX = -2, upperX = 2;
@@ -202,7 +203,7 @@ int main(int argc, char** argv) {
   Offset offset(lowerX, upperX, lowerY, upperY);
   generateImage(width, height, offset, maxThreads, filename, quiet);
 
-  double iElaps = cpuSecond() - iStart;
+  double iElaps = cpuSecondMonolitic() - iStart;
   // if (!quiet)
     printf("Total execution time for this run: %lf\n", iElaps);
 
