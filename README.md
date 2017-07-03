@@ -10,3 +10,6 @@ with the following color setup:
     pixel->red = rgb_value(iter - 370, 1000);
     pixel->green = rgb_value(0, 1000);
     pixel->blue = rgb_value(0, 1000);
+
+We get the following image:
+![Fractal wallpaper](wallpaper.png =960x540)
