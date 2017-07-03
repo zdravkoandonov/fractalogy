@@ -12,4 +12,4 @@ with the following color setup:
     pixel->blue = rgb_value(0, 1000);
 
 We get the following image:
-![Fractal wallpaper](wallpaper.png =960x540)
+![Fractal wallpaper](https://github.com/zdravkoandonov/fractalogy/raw/master/wallpaper.png =960x540)
