@@ -11,6 +11,6 @@ with the following color setup:
     pixel->green = rgb_value(0, 1000);
     pixel->blue = rgb_value(0, 1000);
 
-We get the following image:
+We get an image looking like that:
 
 ![Fractal wallpaper](./wallpaper.png)
