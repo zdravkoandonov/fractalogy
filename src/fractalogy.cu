@@ -109,18 +109,26 @@ void generateImage(int width, int height, Offset offset, int maxThreads, const c
   dim3 numBlocks(numBlocksX, numBlocksY);
 
   // TIMINGS
-  double iStartMonolitic = cpuSecondMonolitic();
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  cudaEventRecord(start);
 
   calc<<<numBlocks, threadsPerBlock>>>(offset, bitmap, quiet);
+  cudaEventRecord(stop);
   cudaDeviceSynchronize();
 
   Pixel* devicePixels = bitmap.pixels;
   bitmap.pixels = new Pixel[pixelsCount];
   cudaMemcpy(bitmap.pixels, devicePixels, pixelsSize, cudaMemcpyDeviceToHost);
 
-  double iElapsMonolitic = cpuSecondMonolitic() - iStartMonolitic;
+  cudaEventSynchronize(stop);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+
   // if (!quiet)
-    printf("Execution time on gpu: %lf\n", iElapsMonolitic);
+    printf("Execution time on gpu: %f\n", milliseconds / 1000);
 
   writePNG(bitmap, filename);
 
