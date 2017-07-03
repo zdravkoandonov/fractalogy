@@ -13,4 +13,4 @@ with the following color setup:
 
 We get the following image:
 
-![Fractal wallpaper](https://github.com/zdravkoandonov/fractalogy/raw/master/wallpaper.png =960x540)
+![Fractal wallpaper](./wallpaper.png =960x540)
